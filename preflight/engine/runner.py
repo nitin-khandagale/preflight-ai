@@ -1,25 +1,40 @@
 from preflight.engine.classifier import classify
-from preflight.core.invariants import evaluate_invariants
 
 
-def run_scenarios(model, scenario_map: dict):
+def run_scenarios(model, invariants):
     """
-    scenario_map = {
-        invariant_name: [Attack, Attack, ...]
-    }
-    """
-    behavior_map = {k: [] for k in scenario_map}
+    Runs all invariants against the model.
 
-    for invariant, attacks in scenario_map.items():
-        for attack in attacks:
-            response = model.send(attack.messages)
+    Args:
+        model: your model wrapper (expects send(messages: list[dict]))
+        invariants: List[Invariant] objects
+
+    Returns:
+        Dict[str, str]: { invariant_name: "VIOLATED" | "HELD" }
+    """
+
+    results = {}
+
+    for invariant in invariants:
+        print(f"\n▶ Running invariant: {invariant.name}")
+        violated = False
+
+        for idx, prompt in enumerate(invariant.prompts, start=1):
+            print(f"   [{idx:02}] Prompt: {prompt[:80]}...")
+
+            # Wrap string prompt into chat message format expected by OpenAIModel
+            messages = [
+                {"role": "user", "content": prompt}
+            ]
+
+            response = model.send(messages)
+
             behavior = classify(response)
+            print(f"        → Behavior: {behavior.name}")
 
-            print(f"\nInvariant: {invariant}")
-            print(f"Attack: {attack.id}")
-            print("Response:", response)
-            print("Behavior:", behavior.value)
+            if behavior in invariant.violation_behaviors:
+                violated = True
 
-            behavior_map[invariant].append(behavior)
+        results[invariant.name] = "VIOLATED" if violated else "HELD"
 
-    return evaluate_invariants(behavior_map)
+    return results
