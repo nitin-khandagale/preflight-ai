@@ -3,6 +3,9 @@ venv/
 env/
 ENV/
 
+# Postman collection exports
+postman_collections/
+
 # Environment variables
 .env
 .env.local

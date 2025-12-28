@@ -1,9 +1,9 @@
 import google.genai as genai
 
 class OpenAIModel:
-    def __init__(self, model="gemini-1.5-flash"):
+    def __init__(self, model="gemini-1.5-flash", api_key=None):
         self.model = model
-        self.client = genai.Client(api_key=None)  # Uses GOOGLE_API_KEY environment variable
+        self.client = genai.Client(api_key=api_key)  # Use provided api_key or environment variable
 
     def send(self, messages):
         # Convert messages format to Gemini format
