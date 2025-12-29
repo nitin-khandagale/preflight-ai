@@ -1,29 +1,54 @@
-﻿# Preflight AI API
+﻿# 🛡️ Preflight AI API
 
-A REST API for testing large language models against security and behavior invariants before deployment.
+> **Enterprise-Grade AI Safety Testing Framework**
 
-## What is This?
+A production-ready REST API for systematically testing Large Language Models against security and behavioral invariants—ensuring your AI systems maintain critical safety boundaries before deployment.
 
-Preflight AI systematically tests your AI model by checking if it maintains critical behavioral boundaries—capability claims, instruction authority, harmful action refusal, and more. Unlike traditional prompt testing, Preflight runs automated, repeatable tests across multiple invariant categories.
+[![Python 3.11+](https://img.shields.io/badge/python-3.11+-blue.svg)](https://www.python.org/)
+[![License](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
+[![FastAPI](https://img.shields.io/badge/FastAPI-0.100+-009485.svg)](https://fastapi.tiangolo.com/)
 
-## How It Works
+---
 
-1. **Submit a test run**  API receives your model credentials and desired invariants
-2. **Execute scenarios**  System generates and executes targeted test prompts
-3. **Evaluate behavior**  Model responses are analyzed against invariant rules
-4. **Store results**  Outcomes saved to database with full audit trail
-5. **Query results**  Retrieve run summaries or detailed failure analysis anytime
+## 🎯 Overview
 
-## API Endpoints
+Preflight AI provides **automated, repeatable security testing** for language models by validating adherence to critical behavioral invariants:
 
-All endpoints require `X-API-Key: test-key-123` header.
+- **Capability Claims** — Detects false or exaggerated capability assertions
+- **Instruction Authority** — Validates instruction hierarchy and override resistance  
+- **Harmful Action Refusal** — Ensures model refuses harmful requests
+- **Role Integrity** — Prevents unauthorized role-switching
+- **Information Boundaries** — Tests information disclosure constraints
+- **Instruction Hierarchy** — Validates instruction priority mechanisms
 
-### Execute Tests
-**POST** `/v1/preflight/run`
+Unlike manual prompt testing, Preflight provides comprehensive, reproducible analysis with full audit trails.
 
-Run invariant tests on your model.
+---
 
-**Request:**
+## 🔄 How It Works
+
+```
+1. Submit Test → 2. Generate Scenarios → 3. Execute Tests → 4. Analyze Results → 5. Audit Trail
+```
+
+- **Submit a test run** — Configure model and select invariants to test
+- **Generate scenarios** — System creates targeted attack prompts (100+ per invariant)
+- **Execute tests** — Prompts submitted to your model via configured endpoints
+- **Analyze responses** — Advanced classifier evaluates model behavior patterns
+- **Store results** — Full audit trail with classified behaviors and violations
+
+---
+
+## 📡 API Reference
+
+All endpoints require authentication via `X-API-Key: test-key-123` header.
+
+### Execute Preflight Tests
+**`POST`** `/v1/preflight/run`
+
+Initiate a comprehensive security test against your model.
+
+**Request Payload:**
 ```json
 {
   "model_name": "gemini-2.0-flash",
@@ -34,10 +59,10 @@ Run invariant tests on your model.
 }
 ```
 
-**Response:**
+**Success Response (200):**
 ```json
 {
-  "run_id": "uuid",
+  "run_id": "29d6dd29-a3a7-4875-baae-72c535128b94",
   "datetime": "2025-12-28T13:08:50",
   "model_name": "gemini-2.0-flash",
   "gate_decision": "PASS",
@@ -47,16 +72,17 @@ Run invariant tests on your model.
 }
 ```
 
-**Notes:**
-- Omit `invariants` field to test all available invariants (default)
-- Use `"invariants": ["all"]` to explicitly test all
+**Parameters:**
+- `invariants` (optional) — Test specific invariants. Omit for all.
+- `model_url` — Endpoint for model API
+- `api_key` — Authentication for model provider
 
 ---
 
-### List All Runs
-**GET** `/v1/preflight/runs?limit=10&offset=0`
+### List Test Runs
+**`GET`** `/v1/preflight/runs?limit=10&offset=0`
 
-Retrieve paginated list of all test runs.
+Retrieve paginated historical test results.
 
 **Response:**
 ```json
@@ -64,16 +90,23 @@ Retrieve paginated list of all test runs.
   "total": 42,
   "limit": 10,
   "offset": 0,
-  "runs": [...]
+  "runs": [
+    {
+      "run_id": "uuid",
+      "model_name": "gemini-2.0-flash",
+      "datetime": "2025-12-28T13:08:50",
+      "gate_decision": "PASS"
+    }
+  ]
 }
 ```
 
 ---
 
 ### Get Run Details
-**GET** `/v1/preflight/runs/{run_id}`
+**`GET`** `/v1/preflight/runs/{run_id}`
 
-Retrieve full details including invariant results and failure analysis.
+Retrieve comprehensive test analysis for a specific run.
 
 **Response:**
 ```json
@@ -86,7 +119,7 @@ Retrieve full details including invariant results and failure analysis.
     {
       "invariant_name": "capability_claims",
       "result": "HELD",
-      "num_prompts_tested": 5
+      "num_prompts_tested": 21
     }
   ],
   "failures": []
@@ -95,10 +128,10 @@ Retrieve full details including invariant results and failure analysis.
 
 ---
 
-### List Invariants
-**GET** `/v1/preflight/invariants`
+### List Available Invariants
+**`GET`** `/v1/preflight/invariants`
 
-Get all available test categories with descriptions.
+Get metadata on all available safety testing categories.
 
 **Response:**
 ```json
@@ -106,11 +139,13 @@ Get all available test categories with descriptions.
   "invariants": [
     {
       "name": "capability_claims",
-      "description": "Tests if model makes false capability or knowledge claims"
+      "description": "Tests if model makes false capability or knowledge claims",
+      "num_test_prompts": 21
     },
     {
       "name": "instruction_authority",
-      "description": "Tests if model respects and follows explicit instructions"
+      "description": "Tests if model respects instruction hierarchy and prevents overrides",
+      "num_test_prompts": 13
     }
   ]
 }
@@ -119,33 +154,63 @@ Get all available test categories with descriptions.
 ---
 
 ### Health Check
-**GET** `/health`
+**`GET`** `/health`
 
-Server status check (no authentication required).
+Server status endpoint (no authentication required).
+
+**Response:**
+```json
+{
+  "status": "healthy",
+  "timestamp": "2025-12-28T13:08:50"
+}
+```
 
 ---
 
-## Quick Start
+## 🚀 Quick Start
 
-### 1. Setup
+### Prerequisites
+- Python 3.11+
+- pip/virtualenv
+- API credentials for your LLM provider (Google, OpenAI, etc.)
+
+### Installation
+
 ```bash
+# Clone repository
+git clone https://github.com/yourusername/preflight_ai_v1.git
+cd preflight_ai_v1
+
+# Create virtual environment
+python -m venv venv
+source venv/bin/activate  # On Windows: venv\Scripts\activate
+
 # Install dependencies
 pip install -r requirements.txt
-
-# Configure .env with your Google API key
-GOOGLE_API_KEY=your-key-here
-API_KEYS=test-key-123
 ```
 
-### 2. Run Server
+### Configuration
+
+Create `.env` file:
+```env
+GOOGLE_API_KEY=your-google-api-key-here
+API_KEYS=test-key-123
+DATABASE_URL=sqlite:///preflight/database/preflight_audit.db
+```
+
+### Run Server
+
 ```bash
 python api_server.py
 ```
 
 Server starts at `http://localhost:8000`
 
-### 3. Test
+### Test API
+
 ```bash
+# Run a complete security audit
 curl -X POST http://localhost:8000/v1/preflight/run \
   -H "Content-Type: application/json" \
   -H "X-API-Key: test-key-123" \
@@ -153,21 +218,77 @@ curl -X POST http://localhost:8000/v1/preflight/run \
     "model_name": "gemini-2.0-flash",
     "model_version": "2.0",
     "model_url": "https://api.google.com/v1",
-    "api_key": "your-google-api-key",
-    "invariants": ["capability_claims"]
+    "api_key": "YOUR_API_KEY",
+    "invariants": ["capability_claims", "instruction_authority"]
   }'
+
+# Get test history
+curl -H "X-API-Key: test-key-123" http://localhost:8000/v1/preflight/runs
+
+# View API documentation
+# Navigate to: http://localhost:8000/docs
 ```
 
 ---
 
-## Database
+## 🗄️ Data Persistence
 
-All test runs and results are persisted in SQLite at `preflight/database/preflight_audit.db`. Enables historical analysis and audit trails.
-
-## Authentication
-
-API Key authentication via `X-API-Key` header. Default test key: `test-key-123`
+All test runs and detailed results are persisted in SQLite:
+- **Location:** `preflight/database/preflight_audit.db`
+- **Tables:** runs, invariants, failures (full audit trail)
+- **Query:** Access via Postman, curl, or your application
 
 ---
 
-**Swagger UI:** `http://localhost:8000/docs`
+## 🔐 Security & Authentication
+
+- **API Key Authentication** via `X-API-Key` header
+- **Default Test Key:** `test-key-123` (configure in `.env`)
+- **HTTPS Recommended** for production deployments
+- **No model data stored** — Only test metadata and results
+
+---
+
+## 📊 Architecture
+
+```
+preflight/
+├── api/                    # FastAPI routes & endpoints
+│   ├── routes.py
+│   ├── models.py          # Pydantic schemas
+│   └── auth.py
+├── engine/                # Classification & execution
+│   ├── classifier.py      # Response behavior analysis
+│   └── runner.py          # Test orchestration
+├── attacks/               # 100+ attack prompts (6 invariants)
+│   ├── capability_claims.py
+│   ├── instruction_authority.py
+│   └── ...
+├── core/                  # Core behavior models
+├── database/              # SQLite persistence
+└── models/                # LLM provider integrations
+```
+
+---
+
+## 📚 Documentation
+
+- **API Docs:** `http://localhost:8000/docs` (Swagger UI)
+- **Architecture:** See [ARCHITECTURE.md](ARCHITECTURE.md)
+- **Evaluation Guide:** See [EVALUATION_GUIDE.md](preflight/evaluation/EVALUATION_GUIDE.md)
+
+---
+
+## 📝 License
+
+MIT License — See [LICENSE](LICENSE) for details
+
+---
+
+## 🤝 Contributing
+
+Pull requests welcome! Please ensure tests pass and code is well-documented.
+
+---
+
+**Built with ❤️ for AI Safety**
