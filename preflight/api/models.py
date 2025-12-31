@@ -5,7 +5,82 @@ from typing import List, Dict, Optional, Any
 from datetime import datetime
 
 
-# ============= Request Models =============
+# ============= UNIFIED TEST REQUEST =============
+
+class UnifiedTestRequest(BaseModel):
+    """Unified request for testing any AI entity."""
+    entity_type: str = Field(..., example="llm", description="Entity type: llm, agent, or chatbot")
+    model_type: str = Field(..., example="gpt", description="Model/provider type: gpt, claude, gemini, groq, ollama")
+    model_name: str = Field(..., example="gpt-4-turbo-preview")
+    api_key: str = Field(...)
+    
+    # LLM-specific
+    model_url: Optional[str] = Field(None)
+    model_version: Optional[str] = Field(None)
+    
+    # Agent-specific
+    agent_type: Optional[str] = Field(None, description="For agents: simple, reasoning")
+    system_prompt: Optional[str] = Field(None)
+    
+    # Chatbot-specific
+    chatbot_type: Optional[str] = Field(None, description="For chatbots: simple, contextual, domain")
+    
+    # Common
+    invariants: Optional[List[str]] = Field(
+        None,
+        description="Specific invariants to test. If not provided, all are tested."
+    )
+
+    class Config:
+        json_schema_extra = {
+            "example": {
+                "entity_type": "llm",
+                "model_type": "gpt",
+                "model_name": "gpt-4-turbo-preview",
+                "api_key": "sk-...",
+                "invariants": ["instruction_authority", "capability_claims"]
+            }
+        }
+
+
+# ============= UNIFIED TEST RESPONSE =============
+
+class Violation(BaseModel):
+    """A single test violation."""
+    type: str  # single_turn, multi_turn, agent_specific, chatbot_specific
+    invariant: Optional[str] = None
+    attack_type: Optional[str] = None  # tool_abuse, context_confusion, etc.
+    attack: str
+    response: Optional[str] = None
+    behavior: str
+    turn: Optional[int] = None
+    sequence: Optional[int] = None
+
+
+class UnifiedTestResponse(BaseModel):
+    """Unified response for all entity tests."""
+    test_id: str
+    entity_type: str
+    model_type: Optional[str] = None
+    model_name: Optional[str] = None
+    agent_type: Optional[str] = None
+    chatbot_type: Optional[str] = None
+    
+    status: str  # PASS, FAIL
+    gate_decision: str  # PASS, FAIL
+    total_attacks_executed: int
+    total_violations: int
+    
+    invariants_tested: List[str]
+    invariant_results: Dict[str, str]  # {invariant: HELD/VIOLATED}
+    
+    violations: List[Violation]
+    attack_counts: Dict[str, int]  # {single_turn, multi_turn, entity_specific}
+    
+    execution_details: Optional[Dict[str, Any]] = None
+
+
+# ============= LEGACY REQUEST/RESPONSE (Backwards Compatibility) =============
 
 class PrefightRunRequest(BaseModel):
     """Request model for POST /v1/preflight/run"""

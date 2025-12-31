@@ -4,13 +4,15 @@ from fastapi import APIRouter, Depends, HTTPException, status, Query
 from .models import (
     PrefightRunRequest, RunResponse, RunDetailResponse, RunsListResponse,
     InvariantsResponse, InvariantInfo, HealthResponse, AgentRequest, AgentResponse,
-    ChatbotRequest, ChatbotResponse, ModelsListResponse
+    ChatbotRequest, ChatbotResponse, ModelsListResponse, UnifiedTestRequest, UnifiedTestResponse,
+    Violation
 )
 from .auth import verify_api_key
 from .db_helpers import get_all_runs, get_run_by_id
 from ..workflow import PrefightOrchestrator
 from ..models.provider_factory import ProviderFactory
 from ..agents import SimpleAgent, ReasoningAgent, SimpleBot, ContextualBot, DomainBot
+from ..engine.test_executor import get_test_executor
 from ..attacks.instruction_authority import instruction_authority
 from ..attacks.capability_claims import capability_claims
 from typing import List
@@ -204,6 +206,172 @@ async def health_check():
     Returns the API status.
     """
     return HealthResponse(status="ok", version="1.0.0")
+
+
+# ============= UNIFIED TEST ENDPOINT (RECOMMENDED) =============
+
+@router.post("/v1/test", response_model=UnifiedTestResponse, status_code=status.HTTP_201_CREATED)
+async def unified_test(
+    request: UnifiedTestRequest,
+    api_key: str = Depends(verify_api_key)
+):
+    """
+    Unified endpoint for testing any AI entity (LLM, Agent, Chatbot).
+    
+    **Entity Types:**
+    - `llm`: Language Models (single/multi-turn attacks)
+    - `agent`: AI Agents (single/multi-turn + tool abuse, planning attacks)
+    - `chatbot`: Conversational Bots (single/multi-turn + context/history attacks)
+    
+    **Model Types:** gpt, claude, gemini, groq, ollama
+    
+    **Example - Test LLM:**
+    ```json
+    {
+      "entity_type": "llm",
+      "model_type": "gpt",
+      "model_name": "gpt-4-turbo-preview",
+      "api_key": "sk-..."
+    }
+    ```
+    
+    **Example - Test Agent:**
+    ```json
+    {
+      "entity_type": "agent",
+      "agent_type": "simple",
+      "model_type": "gpt",
+      "model_name": "gpt-4-turbo-preview",
+      "api_key": "sk-..."
+    }
+    ```
+    
+    **Example - Test Chatbot:**
+    ```json
+    {
+      "entity_type": "chatbot",
+      "chatbot_type": "contextual",
+      "model_type": "claude",
+      "model_name": "claude-3-5-sonnet-20241022",
+      "api_key": "sk-ant-..."
+    }
+    ```
+    """
+    try:
+        # Create appropriate entity based on type
+        entity = None
+        
+        if request.entity_type == "llm":
+            # Create LLM provider
+            entity = ProviderFactory.create(
+                model_type=request.model_type,
+                api_key=request.api_key,
+                model_name=request.model_name
+            )
+            
+            # Validate connection
+            if not entity.validate_connection():
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail=f"Failed to connect to {request.model_type} API. Check credentials."
+                )
+        
+        elif request.entity_type == "agent":
+            # Create agent with provider
+            provider = ProviderFactory.create(
+                model_type=request.model_type,
+                api_key=request.api_key,
+                model_name=request.model_name
+            )
+            
+            if not provider.validate_connection():
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail=f"Failed to connect to {request.model_type} API"
+                )
+            
+            if request.agent_type == "reasoning":
+                entity = ReasoningAgent(provider)
+            else:
+                entity = SimpleAgent(provider, system_prompt=request.system_prompt)
+        
+        elif request.entity_type == "chatbot":
+            # Create chatbot with provider
+            provider = ProviderFactory.create(
+                model_type=request.model_type,
+                api_key=request.api_key,
+                model_name=request.model_name
+            )
+            
+            if not provider.validate_connection():
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail=f"Failed to connect to {request.model_type} API"
+                )
+            
+            system_prompt = request.system_prompt or "You are a helpful assistant."
+            
+            if request.chatbot_type == "contextual":
+                entity = ContextualBot(provider, system_prompt=system_prompt)
+            elif request.chatbot_type == "domain":
+                entity = DomainBot(provider, domain="General", system_prompt=system_prompt)
+            else:
+                entity = SimpleBot(provider, system_prompt=system_prompt)
+        
+        else:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Invalid entity_type: {request.entity_type}. Must be 'llm', 'agent', or 'chatbot'"
+            )
+        
+        # Execute unified test
+        executor = get_test_executor()
+        test_results = executor.execute(
+            entity_type=request.entity_type,
+            entity=entity,
+            invariants=request.invariants
+        )
+        
+        # Format response
+        violations = [
+            Violation(
+                type=v.get("type"),
+                invariant=v.get("invariant"),
+                attack_type=v.get("attack_type"),
+                attack=v.get("attack", ""),
+                response=v.get("response"),
+                behavior=v.get("behavior"),
+                turn=v.get("turn"),
+                sequence=v.get("sequence"),
+            )
+            for v in test_results.get("violations", [])
+        ]
+        
+        return UnifiedTestResponse(
+            test_id=test_results["test_id"],
+            entity_type=test_results["entity_type"],
+            model_type=request.model_type,
+            model_name=request.model_name,
+            agent_type=request.agent_type if request.entity_type == "agent" else None,
+            chatbot_type=request.chatbot_type if request.entity_type == "chatbot" else None,
+            status=test_results["gate_decision"],
+            gate_decision=test_results["gate_decision"],
+            total_attacks_executed=test_results.get("attacks_executed", 0),
+            total_violations=test_results.get("total_violations", 0),
+            invariants_tested=test_results.get("invariants_tested", []),
+            invariant_results=test_results.get("invariant_results", {}),
+            violations=violations,
+            attack_counts=test_results.get("attack_counts", {}),
+        )
+    
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Test execution error: {str(e)}"
+        )
+
 
 
 @router.get("/models", response_model=ModelsListResponse)
