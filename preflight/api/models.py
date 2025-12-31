@@ -1,7 +1,7 @@
 """Pydantic models for API requests and responses."""
 
 from pydantic import BaseModel, Field
-from typing import List, Dict, Optional
+from typing import List, Dict, Optional, Any
 from datetime import datetime
 
 
@@ -9,26 +9,59 @@ from datetime import datetime
 
 class PrefightRunRequest(BaseModel):
     """Request model for POST /v1/preflight/run"""
+    model_type: str = Field(..., example="gemini", description="Model type: gemini, gpt, claude, groq, ollama, etc.")
     model_name: str = Field(..., example="gemini-2.0-flash")
     model_version: str = Field(..., example="2.0")
-    model_url: str = Field(..., example="https://api.google.com/v1")
+    model_url: Optional[str] = Field(None, example="https://api.google.com/v1", description="API URL (optional for some providers)")
     api_key: str = Field(..., example="sk-xxxxx")
     invariants: Optional[List[str]] = Field(
         None, 
         example=["capability_claims", "instruction_authority"],
-        description="List of invariant names to test. If not provided or empty, all invariants will run. Use 'all' to explicitly run all."
+        description="List of invariant names to test. If not provided or empty, all invariants will run."
     )
 
     class Config:
         json_schema_extra = {
             "example": {
-                "model_name": "gemini-2.0-flash",
-                "model_version": "2.0",
-                "model_url": "https://api.google.com/v1",
-                "api_key": "your-api-key",
+                "model_type": "gpt",
+                "model_name": "gpt-4-turbo-preview",
+                "model_version": "1.0",
+                "model_url": "https://api.openai.com/v1",
+                "api_key": "sk-xxxxx",
                 "invariants": ["capability_claims", "instruction_authority"]
             }
         }
+
+
+class AgentRequest(BaseModel):
+    """Request model for agent execution."""
+    agent_type: str = Field(..., example="simple", description="Agent type: simple, reasoning")
+    model_type: str = Field(..., example="gpt", description="Model type: gemini, gpt, claude, groq, ollama")
+    model_name: str = Field(..., example="gpt-4-turbo-preview")
+    api_key: str = Field(...)
+    task: str = Field(..., description="Task for the agent to execute")
+    system_prompt: Optional[str] = Field(None, description="Custom system prompt for the agent")
+    context: Optional[Dict[str, Any]] = Field(None, description="Additional context for the task")
+
+
+class ChatbotMessage(BaseModel):
+    """Message in chatbot conversation."""
+    role: str  # "user" or "assistant"
+    content: str
+
+
+class ChatbotRequest(BaseModel):
+    """Request model for chatbot interaction."""
+    chatbot_type: str = Field(..., example="simple", description="Chatbot type: simple, contextual, domain")
+    model_type: str = Field(..., example="gpt", description="Model type")
+    model_name: str = Field(..., example="gpt-4-turbo-preview")
+    api_key: str = Field(...)
+    user_message: str = Field(...)
+    system_prompt: Optional[str] = Field(None)
+    conversation_history: Optional[List[ChatbotMessage]] = Field(None)
+    context: Optional[Dict[str, Any]] = Field(None, description="Context for contextual bots")
+    domain: Optional[str] = Field(None, description="Domain for domain bots")
+    knowledge_base: Optional[Dict[str, str]] = Field(None, description="Knowledge base for domain bots")
 
 
 # ============= Response Models =============
@@ -104,3 +137,32 @@ class ErrorResponse(BaseModel):
     """Error response"""
     detail: str
     status_code: int
+
+
+# ============= Agent Response Models =============
+
+class AgentResponse(BaseModel):
+    """Response for agent execution."""
+    agent_id: str
+    agent_type: str
+    task: str
+    result: str
+    conversation_history: List[Dict[str, str]]
+    iterations: int
+
+
+# ============= Chatbot Response Models =============
+
+class ChatbotResponse(BaseModel):
+    """Response for chatbot interaction."""
+    chatbot_id: str
+    chatbot_type: str
+    user_message: str
+    assistant_response: str
+    conversation_history: List[ChatbotMessage]
+
+
+class ModelsListResponse(BaseModel):
+    """Response listing supported models."""
+    supported_models: List[str]
+    default_models: Dict[str, str]
