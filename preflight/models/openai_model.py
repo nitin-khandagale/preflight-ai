@@ -1,7 +1,7 @@
 import google.genai as genai
 
 class OpenAIModel:
-    def __init__(self, model="gemini-1.5-flash", api_key=None):
+    def __init__(self, model="gemini-2.0-flash", api_key=None):
         self.model = model
         self.client = genai.Client(api_key=api_key)  # Use provided api_key or environment variable
 

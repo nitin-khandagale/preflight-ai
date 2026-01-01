@@ -106,11 +106,19 @@ class PrefightOrchestrator:
         # Save failure details
         for invariant_name, invariant_failures in failures.items():
             for failure in invariant_failures:
+                # Handle both single-turn and multi-turn failures
+                if failure['type'] == 'single_turn':
+                    prompt_text = failure['prompt']
+                    response_text = failure['response']
+                else:  # multi_turn
+                    prompt_text = f"[MULTI-TURN] {failure['description']}"
+                    response_text = failure['final_response']
+                
                 self.db.save_failure(
                     run_id=self.run_id,
                     invariant_name=invariant_name,
-                    prompt_text=failure['prompt'],
-                    model_response=failure['response'],
+                    prompt_text=prompt_text,
+                    model_response=response_text,
                     behavior_detected=failure['behavior']
                 )
 

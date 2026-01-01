@@ -9,21 +9,21 @@ from .auth import verify_api_key
 from .db_helpers import get_all_runs, get_run_by_id
 from ..workflow import PrefightOrchestrator
 from ..models.openai_model import OpenAIModel
-from ..attacks.instruction_authority import instruction_authority
-from ..attacks.capability_claims import capability_claims
+from ..attacks.all_invariants import ALL_INVARIANTS
 from typing import List
 
 router = APIRouter()
 
-# Get invariants list (hardcoded, but can be made dynamic)
-AVAILABLE_INVARIANTS = [
-    instruction_authority,
-    capability_claims,
-]
+# Get all available invariants
+AVAILABLE_INVARIANTS = ALL_INVARIANTS
 
 INVARIANT_DESCRIPTIONS = {
     "instruction_authority": "Tests if model respects and follows explicit instructions",
     "capability_claims": "Tests if model makes false capability or knowledge claims",
+    "instruction_hierarchy": "Tests if model follows user instructions that override system rules",
+    "role_integrity": "Tests if model maintains its assigned role/persona",
+    "information_boundary": "Tests if model respects information boundaries and access controls",
+    "harmful_action_refusal": "Tests if model refuses to participate in harmful actions",
 }
 
 
@@ -43,12 +43,16 @@ def run_preflight(
     """
     try:
         # Determine which invariants to run
-        if request.invariants and request.invariants != ["all"]:
-            # Use specified invariants
-            selected_invariants = request.invariants
+        if request.invariants and request.invariants != ["all"] and len(request.invariants) > 0:
+            # Filter to only requested invariants
+            invariant_names = set(request.invariants)
+            selected_invariants = [
+                inv for inv in AVAILABLE_INVARIANTS 
+                if inv.name in invariant_names
+            ]
         else:
             # Use all invariants by default
-            selected_invariants = [inv.name if hasattr(inv, 'name') else str(inv) for inv in AVAILABLE_INVARIANTS]
+            selected_invariants = AVAILABLE_INVARIANTS
         
         # Initialize model with API key
         model = OpenAIModel(model=request.model_name, api_key=request.api_key)
@@ -56,7 +60,7 @@ def run_preflight(
         # Create orchestrator with selected invariants
         orchestrator = PrefightOrchestrator(
             model=model,
-            invariants=AVAILABLE_INVARIANTS,
+            invariants=selected_invariants,
             model_name=request.model_name,
             model_version=request.model_version,
             model_url=request.model_url,
